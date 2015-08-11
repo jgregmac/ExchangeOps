@@ -39,6 +39,13 @@ Param(
     [string]$Server
 )
 
+Set-PSDebug -Strict
+
+#Insert ISE and EMS environment tests here.
+if ((Get-PSSnapin | ? -property Name -match 'microsoft\.exchange').count -lt 4) {
+    Add-PSSnapin microsoft.exchange*
+}
+
 #--------------------------------------------------------------------------------
 function Main {
     
@@ -56,13 +63,17 @@ function Main {
 
     #Resumes the node in the cluster and enables full cluster functionality for the server
     Write-Verbose "Resuming the cluster node and enabling full cluster functionality."
-    try {
-        $resume_node = [scriptblock]::Create("Resume-ClusterNode $Server | out-null")
-        invoke-command -Computer $Server -ScriptBlock $resume_node -EV SuspErr
-    }
-    catch {
-        throw "Encountered error trying to Suspend-ClusterNode $Server.`n$($SuspErr[0])"
-    }
+	if ((Get-ClusterNode -Name $server).State -ne 'Up') {		
+		try {
+			$resume_node = [scriptblock]::Create("Resume-ClusterNode $Server | out-null")
+			invoke-command -Computer $Server -ScriptBlock $resume_node -EA stop
+		}
+		catch {
+			return "Encountered error trying to Resume-ClusterNode $Server.  Error Message: `n$_"
+		}
+	} else {
+		write-host "NOTE: Cluster node $server is already running." -ForegroundColor Yellow
+	}
 
     #Allow databases to become active on the server
     Write-Verbose "$Server can now host active database copies."
@@ -86,9 +97,9 @@ function Main {
     Write-Host "You should redistribute mailbox databases in the DAG."  -ForegroundColor Green
     Write-host "This command pipeline below will activate on $Server all the databases for which it is set as the first activation preference."
 
-    $remount_dbs = "Get-MailboxDatabaseCopyStatus -server $Server | " +
-                        'where ActivationPreference -eq 1 | foreach { ' +
-                        'Move-ActiveMailboxDatabase $_.DatabaseName -ActivateOnServer $Server }'
+    $remount_dbs = 'Get-MailboxDatabaseCopyStatus -server ' + $Server + ' ` ' + "`n" +
+        '| where ActivationPreference -eq 1 `' + "`n" +
+        '| foreach { Move-ActiveMailboxDatabase $_.DatabaseName -ActivateOnServer ' + $Server + '}'
     write-host $remount_dbs -ForegroundColor White
 
 } #end function:Main

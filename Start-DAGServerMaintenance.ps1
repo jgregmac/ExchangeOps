@@ -52,85 +52,101 @@ Param(
     HelpMessage="Enter FQDN of server to move mail queue to.")]
     [string]$QueueTarget
 )
+Set-PSDebug -Strict
+
+#Insert ISE and EMS environment tests here.
+if ((Get-PSSnapin | ? -property Name -match 'microsoft\.exchange').count -lt 4) {
+    Add-PSSnapin microsoft.exchange*
+}
 
 #--------------------------------------------------------------------------------
 function Main {
+    #write-verbose 'Setting up implicit remoting to ensure access to Exchange Management Shell functions'
+    #$ExchangeSession = New-PSSession -ConfigurationName Microsoft.Exchange -ConnectionUri "http://$env:computername.campus.ad.uvm.edu/PowerShell"
+    #Import-PSSession $ExchangeSession
 
     write-verbose 'Verifying parameters, deriving other settings'
     Test-Parameters
 
     Write-Verbose 'Checking DAG File Share Witness'
-    if ( Get-DatabaseAvailabilityGroup $dag_name -Status | Where WitnessShareInUse -eq 'InvalidConfiguration' ) {
-        throw "File Share Witness for $dag_name shows 'Invalid Configuration'. Starting maintenance in this state could cause problems with quorum."
+    try {
+        if ( Get-DatabaseAvailabilityGroup $dag_name -Status -EA Stop | Where WitnessShareInUse -eq 'InvalidConfiguration' ) {
+            throw "File Share Witness for $dag_name shows 'Invalid Configuration'. Starting maintenance in this state could cause problems with quorum."
+        }
+    }
+    catch {
+        Return "Error executing File Share Witness Check. Error: $_ "
     }
 
     Write-Verbose 'Beginning the process of draining the transport queues'
     try {
-        Set-ServerComponentState $Server -Component HubTransport -State Draining -Requester Maintenance -EA Stop -EV TryErr
+        Set-ServerComponentState $Server -Component HubTransport -State Draining -Requester Maintenance -EA Stop 
     }
     catch {
-        throw "Error setting HubTransport component on $Server to 'Draining'. Error: $( $TryErr[0] )"
+        return "Error setting HubTransport component on $Server to 'Draining'. Error: $_"
     }
 
     Write-Verbose 'Restarting the Transport Services to initiate draining'
     try {
-        invoke-command -ComputerName $server -ScriptBlock { Restart-Service MSExchangeTransport } -EA Stop -EV TryErr
+        invoke-command -ComputerName $server -ScriptBlock { Restart-Service MSExchangeTransport } -EA Stop 
     }
     catch {
-        throw "Error restarting MSExchangeTransport service on $Server. Error: $( $TryErr[0] )"
+        return "Error restarting MSExchangeTransport service on $Server. Error: $_"
     }
 
     Write-verbose 'Beginning the process of draining all Unified Messaging calls'
     try {
-        Set-ServerComponentState $Server -Component UMCallRouter -State Draining -Requester Maintenance -EA Stop -EV TryErr
+        Set-ServerComponentState $Server -Component UMCallRouter -State Draining -Requester Maintenance -EA Stop 
     }
     catch {
-        throw "Error setting UMCallRouter component on $Server to 'Draining'. Error: $( $TryErr[0] )"
+        return "Error setting UMCallRouter component on $Server to 'Draining'. Error: $_"
     }
 
     Write-Verbose "Redirecting messages pending delivery in the local queues to $queue_server"
     try {
-        Redirect-Message -Server $Server -Target $queue_server.fqdn -Confirm:$false -EA Stop -EV TryErr
+        Redirect-Message -Server $Server -Target $queue_server.fqdn -Confirm:$false -EA Stop 
     }
     catch {
-        throw "Error redirecting message gueues to $( $queue_server.fqdn ). Error: $( $TryErr[0] )"
+        return "Error redirecting message gueues to $( $queue_server.fqdn ). Error: $_"
     }
 
     Write-Verbose 'Pausing the cluster node; prevents it from being/becoming the PrimaryActiveManager'
     $suspend_node = [scriptblock]::Create("Suspend-ClusterNode $Server | out-null")
     try {
-        invoke-command -Computer $Server -ScriptBlock $suspend_node -EA Stop -EV TryErr
+        invoke-command -Computer $Server -ScriptBlock $suspend_node -EA Stop 
     }
     catch {
-        throw "Encountered error trying to Suspend-ClusterNode $Server. Error: $( $TryErr[0] )"
+        return "Encountered error trying to Suspend-ClusterNode $Server. Error: $_"
     }
 
     Write-Verbose "Moving all active databases currently hosted on $Server to other DAG members"
     try {
-       Set-MailboxServer $Server -DatabaseCopyActivationDisabledAndMoveNow $true -EA Stop -EV TryErr
+       Set-MailboxServer $Server -DatabaseCopyActivationDisabledAndMoveNow $true -EA Stop 
     }
     catch {
-        throw "Error setting 'DatabaseCopyActivationDisabledAndMoveNow' property on $Server. Error: $( $TryErr[0] )"
+        return "Error setting 'DatabaseCopyActivationDisabledAndMoveNow' property on $Server. Error: $_"
     }
 
     Write-Verbose "Preventing $Server from hosting active database copies" 
     try {
-        Set-MailboxServer $Server -DatabaseCopyAutoActivationPolicy Blocked -EA Stop -EV TryErr
+        Set-MailboxServer $Server -DatabaseCopyAutoActivationPolicy Blocked -EA Stop 
     }
     catch {
-        throw "Error setting 'DatabaseCopyAutoActivationPolicy' property on $Server. Error: $( TryErr[0] )"
+        return "Error setting 'DatabaseCopyAutoActivationPolicy' property on $Server. Error: $( TryErr[0] )"
     }
 
 
     Write-Verbose "Placing $Server into maintenance mode"
     try {
-        Set-ServerComponentState $Server -Component ServerWideOffline -State Inactive -Requester Maintenance -EA Stop -EV TryErr
+        Set-ServerComponentState $Server -Component ServerWideOffline -State Inactive -Requester Maintenance -EA Stop 
     }
     catch {
-        throw "Error setting ServerWideOffline component on $Server to 'Inactive'. Error: $( $TryErr[0] )"
+        return "Error setting ServerWideOffline component on $Server to 'Inactive'. Error: $_"
     }
 
     Show-OffloadProgress
+
+    #Remove-PSSession $ExchangeSession
 
     Write-Host "$Server is out of service and ready for maintenance." -ForegroundColor Green
 
@@ -143,13 +159,13 @@ function Test-Parameters {
         $Script:maint_server = Get-ExchangeServer $Server -ErrorAction Stop
     }
     catch {
-        throw "Unable to retreive MailboxServer object for $Server"
+        return "Unable to retreive MailboxServer object for $Server"
     }
     try {
         $Script:dag_name = (Get-MailboxServer $Server -ErrorAction Stop ).DatabaseAvailabilityGroup.Name
     }
     catch {
-        throw "Unable to determine AD Site location of Server $Server"
+        return "Unable to determine AD Site location of Server $Server"
     }
 
     $Script:exch_site = $maint_server.Site.Name
@@ -160,7 +176,7 @@ function Test-Parameters {
             $Script:queue_server = Get-ExchangeServer $QueueTarget
         }
         catch {
-            throw "Unable to find the delivery queue target server $QueueTarget"
+            return "Unable to find the delivery queue target server $QueueTarget"
         }
     }
     else {
@@ -172,17 +188,25 @@ function Test-Parameters {
                                        Get-Random
         }
         Catch {
-            throw "Unable to find a mailbox server in site $exch_site"
+            return "Unable to find a mailbox server in site $exch_site"
         }
     } # end if/else
 
-    # A final sanity check    
-    if ( $maint_server -isnot [Microsoft.Exchange.Data.Directory.Management.ExchangeServer] ) {
-        throw "Somehow, $maint_server ins't an ExchangeServer object."
+    # A final sanity check
+    <# This entire block will not execute from an implicit remote session:
+    try {
+        # This test only will work if the Exchange Assemblies have been loaded, otherwise, the "throw" is not processed.  
+        if ( $maint_server -isnot [Microsoft.Exchange.Data.Directory.Management.ExchangeServer] ) {
+            throw "Somehow, $maint_server ins't an ExchangeServer object."
+        }
+        if ( $queue_server -isnot [Microsoft.Exchange.Data.Directory.Management.ExchangeServer] ) {
+            throw "Somehow, $queue_server ins't an ExchangeServer object."
+        }
+    } 
+    catch {
+        throw "Unable to test target server objects.  Error: $_"
     }
-    if ( $queue_server -isnot [Microsoft.Exchange.Data.Directory.Management.ExchangeServer] ) {
-        throw "Somehow, $queue_server ins't an ExchangeServer object."
-    }
+    #>
 } #End Test-Parameters
 
 #--------------------------------------------------------------------------------
@@ -197,11 +221,12 @@ function Get-DeliveryQueues {
 #--------------------------------------------------------------------------------
 function Get-QueueMessageCount {
     [CmdletBinding()]
-    param( [parameter(Mandatory=$true,
-                      ValueFromPipeline=$true)]
-            [Microsoft.Exchange.Data.QueueViewer.ExtensibleQueueInfo]
-            $queue
+    param( [parameter(Mandatory=$true,ValueFromPipeline=$true)]$queue)
+    <# Originally:
+    param( [parameter(Mandatory=$true,ValueFromPipeline=$true)]
+        [Microsoft.Exchange.Data.QueueViewer.ExtensibleQueueInfo]$queue
     )
+    #>
     begin   { $MessageCount = 0; }
     process { $MessageCount += $queue.MessageCount }
     end     { $MessageCount }
@@ -254,6 +279,10 @@ function Show-OffloadProgress {
 #>        
             write-output "$current_mesg_count messages remaining"
         }
+        else {
+            #This must be declared here, or we will get trapped in the final if/then.
+            [int32]$current_mesg_count = 0
+        }
 <#        else {
             $progress_mesg['Completed'] = $true
         }
@@ -273,7 +302,12 @@ function Show-OffloadProgress {
 
             write-progress @progress_db
 #>
+            #Curiously, this value does not display incremental decreases while the script is running.  18... 18... 18... 0!           
             write-output "$current_db_count mounted databases remaining"
+        }
+        else {
+            #This must be declared here, or we will get trapped in the final if/then.
+            [int32]$current_db_count = 0
         }
 <#        else {
             $progress_db['Completed'] = $true
