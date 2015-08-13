@@ -159,7 +159,7 @@ function Test-Parameters {
         $Script:maint_server = Get-ExchangeServer $Server -ErrorAction Stop
     }
     catch {
-        return "Unable to retreive MailboxServer object for $Server"
+        return "Unable to retrieve MailboxServer object for $Server"
     }
     try {
         $Script:dag_name = (Get-MailboxServer $Server -ErrorAction Stop ).DatabaseAvailabilityGroup.Name
@@ -193,14 +193,14 @@ function Test-Parameters {
     } # end if/else
 
     # A final sanity check
-    <# This entire block will not execute from an implicit remote session:
+    <#
+    # These tests only will work if the Exchange Assemblies have been loaded, otherwise, the "throw" is not processed.  An error still occurs, but it is non-terminating, and so the desired termination of the script does not occur.
     try {
-        # This test only will work if the Exchange Assemblies have been loaded, otherwise, the "throw" is not processed.  
         if ( $maint_server -isnot [Microsoft.Exchange.Data.Directory.Management.ExchangeServer] ) {
-            throw "Somehow, $maint_server ins't an ExchangeServer object."
+            throw "Somehow, $maint_server isn't an ExchangeServer object."
         }
         if ( $queue_server -isnot [Microsoft.Exchange.Data.Directory.Management.ExchangeServer] ) {
-            throw "Somehow, $queue_server ins't an ExchangeServer object."
+            throw "Somehow, $queue_server isn't an ExchangeServer object."
         }
     } 
     catch {
