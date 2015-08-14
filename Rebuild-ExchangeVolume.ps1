@@ -1,5 +1,4 @@
-﻿<#
-[cmdletBinding()]
+﻿[cmdletBinding()]
 param(
 )
 Set-PSDebug -Strict
@@ -73,7 +72,7 @@ do {
 } until ($done)
 
 ##### Need a procedure to verify that the vDisk was created, and to force a disk rescan so that Windows knows it is avialable ####
-#>
+
 ### Partition and format the new vDisk ###
 # Find the broken mountpoint:
 :rPoints foreach ($rPoint in (gci C:\ExchangeVolumes)) {
