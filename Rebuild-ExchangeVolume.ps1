@@ -113,7 +113,7 @@ $disk = Get-disk -number $winDiskNum 
 #$disk | clear-disk -removeData -confirm:$false       
 $disk | Initialize-Disk -PartitionStyle GPT -Confirm:$false       
 $part = $disk | New-Partition -UseMaximumSize      
-$part | Format-Volume -FileSystem NTFS -NewFileSystemLabel $label -AllocationUnitSize 64KB -Confirm:$false    
+$part | Format-Volume -FileSystem ReFS -NewFileSystemLabel $label -AllocationUnitSize 64KB -Confirm:$false    
 $path = Join-Path C:\ExchangeVolumes $label    
 $mountpoint = New-Item $path -ItemType Directory    
 $part | Add-PartitionAccessPath -AccessPath $mountpoint.FullName
