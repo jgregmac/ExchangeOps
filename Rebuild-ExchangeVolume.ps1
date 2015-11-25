@@ -107,16 +107,16 @@ if (-not $rPointBroken) {write-host "The mount point is not broken.  Exiting..."
 #Fetch the Windows disk number for the new vDisk:
 $winDiskNum = (omreport storage vdisk controller=1 vdisk=$vDiskID | Select-String -pattern '^Device Name').tostring().split(' ') | select -last 1
 #Format a volume label for the new volume:
-$label = $rPoint.Name    
+$label = $rPoint.Name
 
-$disk = Get-disk -number $winDiskNum     
-#$disk | clear-disk -removeData -confirm:$false       
-$disk | Initialize-Disk -PartitionStyle GPT -Confirm:$false       
-$part = $disk | New-Partition -UseMaximumSize      
-$part | Format-Volume -FileSystem ReFS -NewFileSystemLabel $label -AllocationUnitSize 64KB -Confirm:$false    
-$path = Join-Path C:\ExchangeVolumes $label    
-$mountpoint = New-Item $path -ItemType Directory    
-$part | Add-PartitionAccessPath -AccessPath $mountpoint.FullName
+$disk = Get-disk -number $winDiskNum 
+#$disk | clear-disk -removeData -confirm:$false   
+$disk | Initialize-Disk -PartitionStyle GPT -Confirm:$false   
+$part = $disk | New-Partition -UseMaximumSize  
+$part | Format-Volume -FileSystem ReFS -NewFileSystemLabel $label -AllocationUnitSize 64KB -Confirm:$false
+$path = Join-Path C:\ExchangeVolumes $label
+$mountpoint = New-Item $path -ItemType Directory
+$part | Add-PartitionAccessPath -AccessPath $mountpoint.FullName
 
 # get-partition -DiskNumber # -PartitionNumber 2 - has an array attribute "accessPaths", with current mountpoints.
 
