@@ -11,7 +11,9 @@
 #>
 
 #$flags represents the standard set of logging options to be used on the server.
-[string]$flags = "Date,Time,ClientIP,UserName,ServerIP,Method,UriStem,UriQuery,HttpStatus,Win32Status,TimeTaken,ServerPort,UserAgent,Cookie,Referer,HttpSubStatus"
+[string]$flags = "Date,Time,ClientIP,UserName,SiteName,ServerIP,Method," +
+    "UriStem,UriQuery,HttpStatus,Win32Status,TimeTaken,ServerPort,UserAgent," +
+    "Cookie,Referer,HttpSubStatus"
 [string]$format = "W3C"
 
 try {
