@@ -15,7 +15,7 @@ Set-PSDebug -Strict
 
 if (test-path -LiteralPath $log) {Remove-Item -LiteralPath $log -Force -Confirm:$false}
 
-function local:writeHostAndLog{
+function writeHostAndLog{
     param(
     [Parameter(Mandatory=$true)]
     [string]$Out,
@@ -37,7 +37,7 @@ function local:writeHostAndLog{
     } 
 }
 
-function local:outMail {
+function outMail {
 param (
 	[string]$Subj, 
 	[string]$Body
@@ -64,14 +64,14 @@ param (
 $startTime = Get-Date
 writeHostAndLog -out "Script Started: $startTime" -Color Cyan
 
-<#try {
+try {
     $re = New-PSSession -ConfigurationName Microsoft.Exchange -ConnectionUri "http://msx-mh06.campus.ad.uvm.edu/powershell"
     Import-PSSession $re -ea Stop
     Import-Module ActiveDirectory -ea Stop
 } catch {
     writeHostAndLog -out "Could not initialize the PowerShell environment." -color Red
     return 100
-}#>
+}
 
 <#
 #This block should gather a list of users that currently forward to the @med.uvm.ed mail domain...
@@ -173,8 +173,10 @@ writeHostAndLog -out ("List of users for whom contact resource creation failed: 
 writeHostAndLog -out ('  ' + $contactFailed) -color Yellow
 # writeHostAndLog -out ("List of users with addresses already hidden: " + $alreadyHidden) -color Gray
 # writeHostAndLog -out ("List of users who already have a contact: " + $contactExists) -color Gray
-
+writeHostAndLog -out " "
+writeHostAndLog -out "Script Started: $startTime"
 $endTime = get-date
-writeHostAndLog -out "Script ended: $endTime" 
+writeHostAndLog -out "Script ended: $endTime"
+writeHostAndLog -out " "
 $elapsed = $endTime - $startTime
 writeHostAndLog -out ("Elapsed Time: " + $elapsed.TotalSeconds + " Seconds")
