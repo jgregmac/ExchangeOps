@@ -40,7 +40,7 @@ param(
 Set-PSDebug -Strict
 
 # Define script-level variables:
-[string]$to = "jgm@uvm.edu"
+[string]$to = "saa-msx@uvm.edu"
 [string]$from = "Hide-ComUsers Scheduled Task <Hide-ComUsers@msx-mgt2.campus.ad.uvm.edu>"
 [string]$ContactOU = "OU=Contacts,dc=campus,dc=ad,dc=uvm,dc=edu"
 [string]$managedOU = "OU=people,DC=campus,DC=ad,DC=uvm,DC=edu" 
