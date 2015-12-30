@@ -14,6 +14,7 @@ Returns:
    - 0   - Script ran successfully.
    - 100 - Could not initialize the PowerShell environment.
    - 110 - Failed to import $the specified input as CSV.
+   - 120 - Failed to import the constrained list of COM/Allied Health users.
    - 200 - Failed to get a list of GAL-hidden mailboxes.
    - 210 - Failed to get a list of current Mail Contacts Objects.
 
@@ -29,13 +30,16 @@ Switch value that indicates if the results of the script should be failed.  Defa
 
 #>
 param(
-    [Parameter(Mandatory=$true)]
+    [Parameter(Mandatory=$false)]
       [ValidateScript({Test-Path $_ -PathType 'Leaf'})]
-      [string]$file,
+      [string]$file = '\\files\shared\saa\Exchange\temp\med-forwards-penguinonly.csv',
     [Parameter(Mandatory=$false)]
       [string]$log = 'c:\local\temp\Hide-COMUsers.log',
     [Parameter(Mandatory=$false)]
-      [Boolean]$mail = $true
+      [Boolean]$mail = $true,
+    [Parameter(Mandatory=$false)]
+      [ValidateScript({Test-Path $_ -PathType 'Leaf'})]
+      [string]$searchList = '\\files\shared\saa\Exchange\temp\COM_NURSING_GAL.txt'
 )
 Set-PSDebug -Strict
 
@@ -114,7 +118,10 @@ try {
     return 100
 }
 
-# Get list of users to hide/contact-enable:
+###############################################################################
+# Get list of "penguin cluster" users to hide/contact-enable:
+#
+writeHostAndLog -Out "Importing list of penguin cluster forwarders..." -Color Cyan
 $users = @()
 try {
     $users = Import-Csv -Path $file -header 'name','email' -ea Stop
@@ -122,6 +129,81 @@ try {
     writeHostAndLog -Out "Failed to import $file as CSV" -Color Red
     return 110
 }
+writeHostAndLog -out ("Count of penguin forwarders: " + $users.count) -Color Cyan
+writeHostAndLog -out " "
+#
+###############################################################################
+
+###############################################################################
+# Start search for Exhchange mailbox forwarders
+#
+writeHostAndLog -out 'Evaluating list of COM/Allied Health users for @med forwarding' -Color Cyan
+try {
+    [string[]]$searchUsers = Get-Content -Path $searchList -ea Stop
+} catch {
+    writeHostAndLog -out "  Could not load list of users to evaluate from $searchList" -color Red
+    return 120
+}
+
+[PSCustomObject[]]$redirUsers =  @()
+[PSCustomObject[]]$fwdUsers   =  @()
+[string[]]$unprovUsers = @()
+
+forEach ($user in $searchUsers) {  
+    # [string]$sam = $_.samAccountName;
+    # Get-InboxRule -mailbox $_.DistinguishedName -ea Stop -wa SilentlyContinue |
+
+    try {
+        $rules = @()
+        $rules = Get-InboxRule -mailbox $user -ea Stop -wa SilentlyContinue 
+    } catch {
+        # Uncomment to see unprovisioned users
+        # writeHostAndLog -out ("    Could not get inbox rules for user: $user") -color Yellow
+        $unprovUsers += $user
+        continue
+    }
+    forEach ($rule in $rules) {
+        if ($rule.RedirectTo -like "*@med.uvm.edu*") {
+            [PSCustomObject]$obj = [PSCustomObject]@{
+                name = $user; 
+                email = ($rule.RedirectTo[0].Split('"') | select -index 1)
+            }
+            writeHostAndLog -out ("    Found redirected user: " + $obj.name) -Color Gray 
+            $redirUsers += $obj
+        }
+        if ($rule.ForwardTo -like "*@med.uvm.edu*") {
+            [PSCustomObject]$obj = [PSCustomObject]@{ 
+                name = $user; 
+                email = ($rule.RedirectTo[0].Split('"') | select -index 1)
+            }
+            writeHostAndLog -out ("    Found forwarded user: " + $obj.name) -Color Gray
+            $fwdUsers += $obj
+        }
+    }
+}
+writeHostAndLog -out " "
+writeHostAndLog -out ("Count of unprovisioned users: " + $unprovUsers.count) -color Cyan 
+writeHostAndLog -out ("Count of forwarding users: " + $fwdUsers.count) -color Cyan
+writeHostAndLog -out ("Count of redirected users: " + $redirUsers.count) -Color Cyan
+writeHostAndLog -Out " "
+
+#if (test-path $outList) {Remove-Item -Path $outList -Force -Confirm:$false}
+#writeHostAndLog -Out ("Writing out currently forwarding users to: " + $outList) -Color Cyan
+#$redirUsers | Out-File -FilePath $outList -Append
+#$fwdUsers | Out-File -FilePath $outList -Append
+
+#Append mailbox-enabled users with Med forwarding to the extract from the Penguins:
+writeHostAndLog -out ("Appending Exchange forwardwer to the penguin forwarders list...") -Color Cyan
+$users += $redirUsers
+$users += $fwdUsers
+writeHostAndLog -Out ("New count of forwarding users: " + $users.count)
+
+writeHostAndLog -Out " "
+showElapsedTime -startTime $startTime
+
+#
+# Stop search for Exhchange mailbox forwarders
+###############################################################################
 
 ###############################################################################
 # Start Hide-in-GAL / Create Contact Object loop:
@@ -302,4 +384,7 @@ if ($mail) {
     foreach ($line in $bodyArray) {$body += $line + "`r`n"}
     outMail -to $to -from $from -Subj $subj -Body $body
 }
+
+get-pssession | remove-pssession -ea SilentlyContinue | Out-Null
+
 Return 0
