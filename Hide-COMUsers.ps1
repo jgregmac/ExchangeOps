@@ -1,6 +1,7 @@
 ﻿<#
 .SYNOPSIS
-Modifys records of College of Medicine users by hiding them in the Global Address List and publish an alternate contact record.
+Modifys records of College of Medicine users by hiding them in the Global 
+Address List and publish an alternate contact record.
 
 .DESCRIPTION
 Takes a list of users from a CSV in the format NetID,emailAddress:
@@ -19,14 +20,29 @@ Returns:
    - 210 - Failed to get a list of current Mail Contacts Objects.
 
 .PARAMETER file
-Name/Path of a CSV file in NetID,emailAddress format that lists the users to be hidden.
+Name/Path of a CSV file in NetID,emailAddress format that lists the users to 
+be hidden.
 
 .PARAMETER log
-Name/Path of a file to which to log the actions of this script.  Default value is:
+Name/Path of a file to which to log the actions of this script.  Default value 
+is:
 C:\local\temp\Hide-COMUsers.log
 
 .PARAMETER mail
-Switch value that indicates if the results of the script should be failed.  Default value is $true.
+Switch value that indicates if the results of the script should be failed.  
+Default value is $true.
+
+.PARAMETER searchList
+Name/Path of a list of users which will be searched for existing 
+forward/redirect rules.  searchList needs to be provided from an external 
+feed.  Use of this list greatly accelerates the execution time of the 
+script.  If we needed to search all inbox rules, this script would run for a
+minimum of two hours.
+
+.PARAMETER servers
+An array of unqualified server names that are potential targets for implicit
+remoting of Exchange cmdlets.  The target server for this run of the script 
+will be selected randomly from this list.
 
 #>
 param(
@@ -39,7 +55,10 @@ param(
       [Boolean]$mail = $true,
     [Parameter(Mandatory=$false)]
       [ValidateScript({Test-Path $_ -PathType 'Leaf'})]
-      [string]$searchList = '\\files\shared\saa\Exchange\temp\COM_NURSING_GAL.txt'
+      [string]$searchList = '\\files\shared\saa\Exchange\temp\COM_NURSING_GAL.txt',
+    [Parameter(Mandatory=$false)]
+      [array]$servers = @('msx-mh01','msx-mh02','msx-mh03','msx-mh04','msx-mh05','msx-mh06', `
+                          'msx-tp01','msx-tp02','msx-tp03','msx-tp04','msx-tp05','msx-tp06')
 )
 Set-PSDebug -Strict
 
@@ -109,8 +128,10 @@ param (
 $startTime = Get-Date
 writeHostAndLog -out "Script Started: $startTime" -Color Cyan
 
+$server = Get-Random $servers
+
 try {
-    $re = New-PSSession -ConfigurationName Microsoft.Exchange -ConnectionUri "http://msx-mh06.campus.ad.uvm.edu/powershell"
+    $re = New-PSSession -ConfigurationName Microsoft.Exchange -ConnectionUri ("http://" + $server + ".campus.ad.uvm.edu/powershell")
     Import-PSSession $re -ea Stop
     Import-Module ActiveDirectory -ea Stop
 } catch {
@@ -148,11 +169,12 @@ try {
 [PSCustomObject[]]$redirUsers =  @()
 [PSCustomObject[]]$fwdUsers   =  @()
 [string[]]$unprovUsers = @()
+[int32]$count = 0
 
 forEach ($user in $searchUsers) {  
     # [string]$sam = $_.samAccountName;
     # Get-InboxRule -mailbox $_.DistinguishedName -ea Stop -wa SilentlyContinue |
-
+    $count ++
     try {
         $rules = @()
         $rules = Get-InboxRule -mailbox $user -ea Stop -wa SilentlyContinue 
@@ -168,7 +190,7 @@ forEach ($user in $searchUsers) {
                 name = $user; 
                 email = ($rule.RedirectTo[0].Split('"') | select -index 1)
             }
-            writeHostAndLog -out ("    Found redirected user: " + $obj.name) -Color Gray 
+            writeHostAndLog -out ("    Found redirected user: " + $obj.name+ " (" + $count + " of " + $searchUsers.Count +")") -Color Gray 
             $redirUsers += $obj
         }
         if ($rule.ForwardTo -like "*@med.uvm.edu*") {
@@ -176,7 +198,7 @@ forEach ($user in $searchUsers) {
                 name = $user; 
                 email = ($rule.RedirectTo[0].Split('"') | select -index 1)
             }
-            writeHostAndLog -out ("    Found forwarded user: " + $obj.name) -Color Gray
+            writeHostAndLog -out ("    Found forwarded user: " + $obj.name + " (" + $count + " of " + $searchUsers.Count +")") -Color Gray
             $fwdUsers += $obj
         }
     }
