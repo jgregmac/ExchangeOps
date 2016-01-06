@@ -275,26 +275,29 @@ foreach ($user in $users) {
         # writeHostAndLog -out ("    User: " + $user.name + " Already was hidden in the GAL.") -Color Gray
     }
     # Create a new AD contact object:
-    if (-not (Get-Contact -Identity $user.email -ea SilentlyContinue)) {
+    [string]$mcAlias = $user.name + '-med'
+    $oldMc = Get-Contact -Identity $mcAlias -ea SilentlyContinue
+    if (-not $oldMc) {
         writeHostAndLog -out ("    Creating a contact record for: " + $user.name) -Color Gray
         try {
             #Add phone, department, title
-            $mc = New-MailContact -Name $aduser.DisplayName -Alias ($user.name + '-med') `
+            if ($aduser.DisplayName) {$cName = $aduser.DisplayName} else {$cName = $aduser.Name}
+            $newMC = New-MailContact -Name $cName -Alias ($user.name + '-med') `
                 -ExternalEmailAddress $user.email -OrganizationalUnit $ContactOU -ea Stop
         } catch {
-            writeHostAndLog -out ("    Failed to create a contact for: " + $aduser.SamAccountName) -color Red
+            writeHostAndLog -out ("    Failed to create a contact for: " + $user.name) -color Red
             $contactFailed += $user.name
             continue
         }
         try {
-            if ($aduser.Company)     { $mc | Set-Contact -Company $aduser.Company -ea Stop }
-            if ($aduser.Department)  { $mc | Set-Contact -Department $aduser.Department -ea Stop }
-            if ($aduser.Fax)         { $mc | Set-Contact -Fax $aduser.Fax -ea Stop }
-            if ($aduser.GivenName)   { $mc | Set-Contact -FirstName $aduser.GivenName -ea Stop }
-            if ($aduser.Initials)    { $mc | Set-Contact -Initials $aduser.Initials -ea Stop }
-            if ($aduser.Office)      { $mc | Set-Contact -Office $aduser.Office -ea Stop }
-            if ($aduser.OfficePhone) { $mc | Set-Contact -Phone $aduser.OfficePhone -ea Stop }
-            if ($aduser.Surname)     { $mc | Set-Contact -LastName $aduser.Surname -ea Stop }
+            if ($aduser.Company)     { $newMC | Set-Contact -Company $aduser.Company -ea Stop }
+            if ($aduser.Department)  { $newMC | Set-Contact -Department $aduser.Department -ea Stop }
+            if ($aduser.Fax)         { $newMC | Set-Contact -Fax $aduser.Fax -ea Stop }
+            if ($aduser.GivenName)   { $newMC | Set-Contact -FirstName $aduser.GivenName -ea Stop }
+            if ($aduser.Initials)    { $newMC | Set-Contact -Initials $aduser.Initials -ea Stop }
+            if ($aduser.Office)      { $newMC | Set-Contact -Office $aduser.Office -ea Stop }
+            if ($aduser.OfficePhone) { $newMC | Set-Contact -Phone $aduser.OfficePhone -ea Stop }
+            if ($aduser.Surname)     { $newMC | Set-Contact -LastName $aduser.Surname -ea Stop }
         } catch {
             writeHostAndLog -out ("    Failed to set extended attributes for contact: " + $aduser.SamAccountName) -color Red
             $contactFailed += $user.name
@@ -304,6 +307,7 @@ foreach ($user in $users) {
         #Mail contact object already exists in AD.
         #writeHostAndLog -out ("    Contact object already exists") -color Gray
         $contactExists += $user.name
+        ### NOTE: We need to add a routine here to check for changes to the Mail Contact and update if there are changes! ###
     }
 }
 showElapsedTime -startTime $startTime
