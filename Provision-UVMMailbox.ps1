@@ -38,13 +38,6 @@ begin {
     # Ugh, I hate doing this, but I'm having trouble finding a variable like $PSScriptRoot that doesn't change based upon the caller.
     $installDir = "c:\local\scripts"
 
-    # We won't need this map after we're done provisioning most of the accounts.
-    $usermap_csv = Import-Csv "$installDir\provisioning\user-dbmap.csv" 
-
-    $userdb = @{}
-
-    $usermap_csv | ForEach-Object { $userdb[$_.netid] = $_.Database }
-
     # Find a list of available databases for provisioning.
 
     $mbxDbs = Get-mailboxdatabase | where-object { $_.IsExcludedFromProvisioning -eq $False `
@@ -71,12 +64,7 @@ process {
         $mb = Get-Mailbox -Identity $upn -ErrorAction Stop
     } catch [System.Management.Automation.RemoteException] {
         write-verbose "There was a problem with mailbox $upn.  I should create it."
-        
-        if ( $userdb.containsKey($userid) ) {
-            $mbxdb = $userdb[$userid]
-        } else {
-            $mbxdb = Fetch-NextMailboxDatabase
-        }
+        $mbxdb = Fetch-NextMailboxDatabase
         try {
 
             write-verbose "calling enable-mailbox -identity $upn -database $mbxdb"
