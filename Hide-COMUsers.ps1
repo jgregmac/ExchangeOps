@@ -19,9 +19,9 @@ Returns:
    - 200 - Failed to get a list of GAL-hidden mailboxes.
    - 210 - Failed to get a list of current Mail Contacts Objects.
 
-.PARAMETER file
-Name/Path of a CSV file in NetID,emailAddress format that lists the users to 
-be hidden.
+.PARAMETER penguinFeed
+Name/Path of a CSV file in NetID,emailAddress format that lists current penguin
+cluster users that forward their mail to @med, and thus need to be hidden.
 
 .PARAMETER log
 Name/Path of a file to which to log the actions of this script.  Default value 
@@ -48,7 +48,7 @@ will be selected randomly from this list.
 param(
     [Parameter(Mandatory=$false)]
       [ValidateScript({Test-Path $_ -PathType 'Leaf'})]
-      [string]$file = '\\files\shared\saa\Exchange\temp\med-forwards-penguinonly.csv',
+      [string]$penguinFeed = '\\files\shared\saa\Exchange\temp\med-forwards-penguinonly.csv',
     [Parameter(Mandatory=$false)]
       [string]$log = 'c:\local\temp\Hide-COMUsers.log',
     [Parameter(Mandatory=$false)]
@@ -159,9 +159,9 @@ try {
 writeHostAndLog -Out "Importing list of penguin cluster forwarders..." -Color Cyan
 $users = @()
 try {
-    $users = Import-Csv -Path $file -header 'name','email' -ea Stop
+    $users = Import-Csv -Path $penguinFeed -header 'name','email' -ea Stop
 } catch {
-    writeHostAndLog -Out "Failed to import $file as CSV" -Color Red
+    writeHostAndLog -Out "Failed to import $penguinFeed as CSV" -Color Red
     return 110
 }
 writeHostAndLog -out ("Count of penguin forwarders: " + $users.count) -Color Cyan
