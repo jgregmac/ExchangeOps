@@ -47,14 +47,16 @@ will be selected randomly from this list.
 #>
 param(
     [Parameter(Mandatory=$false)]
-      [ValidateScript({Test-Path $_ -PathType 'Leaf'})]
+      #Validation may be causing the script to puke.
+      #[ValidateScript({Test-Path $_ -PathType 'Leaf'})]
       [string]$penguinFeed = '\\files\shared\saa\Exchange\temp\med-forwards-penguinonly.csv',
     [Parameter(Mandatory=$false)]
       [string]$log = 'c:\local\temp\Hide-COMUsers.log',
     [Parameter(Mandatory=$false)]
       [Boolean]$mail = $true,
     [Parameter(Mandatory=$false)]
-      [ValidateScript({Test-Path $_ -PathType 'Leaf'})]
+      #Validation may be causing the script to puke.
+      #[ValidateScript({Test-Path $_ -PathType 'Leaf'})]
       [string]$searchList = '\\files\shared\saa\Exchange\temp\COM_NURSING_GAL.txt',
     [Parameter(Mandatory=$false)]
       [array]$servers = @('msx-mh01','msx-mh02','msx-mh03','msx-mh04','msx-mh05','msx-mh06', `
