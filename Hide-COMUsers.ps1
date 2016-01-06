@@ -124,6 +124,19 @@ param (
 	$SmtpClient.Send($mailMessage) 
 }
 
+function logError {
+    param(
+        [parameter(Mandatory=$true)]
+          $errorObj
+    )
+    writeHostAndLog -out "Error Exception:" -color Yellow
+    writeHostAndLog -Out $errorObj.Exception.Message -color Red
+    writeHostAndLog -out "Invocation Line:" -color Yellow
+    writeHostAndLog -Out $errorObj.InvocationInfo.Line -color Red
+    writeHostAndLog -out "Invocation Position Message:" -color Yellow
+    writeHostAndLog -Out $errorObj.InvocationInfo.PositionMessage -color Red
+}
+
 #Start logging:
 $startTime = Get-Date
 writeHostAndLog -out "Script Started: $startTime" -Color Cyan
@@ -136,6 +149,7 @@ try {
     Import-Module ActiveDirectory -ea Stop
 } catch {
     writeHostAndLog -out "Could not initialize the PowerShell environment." -color Red
+    logError $_
     return 100
 }
 
@@ -163,6 +177,7 @@ try {
     [string[]]$searchUsers = Get-Content -Path $searchList -ea Stop
 } catch {
     writeHostAndLog -out "  Could not load list of users to evaluate from $searchList" -color Red
+    logError $_
     return 120
 }
 
@@ -331,6 +346,7 @@ try {
         select -ExpandProperty SamAccountName
 } catch {
     writeHostAndLog -out "Failed to get a list of GAL-hidden mailboxes." -color Red
+    logError $_
     return 200
 }
 # Loop though all hidden users:
