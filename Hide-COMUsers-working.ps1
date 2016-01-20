@@ -183,8 +183,10 @@ try {
     return 120
 }
 
-[PSCustomObject[]]$redirUsers =  @()
-[PSCustomObject[]]$fwdUsers   =  @()
+[PSCustomObject[]]$redirUsers    =  @()
+[PSCustomObject[]]$fwdUsers      =  @()
+[PSCustomObject[]]$redirLegacyDN =  @()
+[PSCustomObject[]]$fwdLegacyDN   =  @()
 [string[]]$unprovUsers = @()
 [int32]$count = 0
 
@@ -210,13 +212,29 @@ forEach ($user in $searchUsers) {
             writeHostAndLog -out ("    Found redirected user: " + $obj.name+ " (" + $count + " of " + $searchUsers.Count +")") -Color Gray 
             $redirUsers += $obj
         }
+        elseif ($rule.RedirectTo -and $rule.RedirectTo[0].Address -match 'FYDIBOHF23SPDLT') {
+            [PSCustomObject]$obj = [PSCustomObject]@{
+                name = $user; 
+                LegacyExchangeDN = ($rule.RedirectTo[0].Address)
+            }
+            writeHostAndLog -out ("    Found redirected user (to LegacyExchangeDN): " + $obj.name+ " (" + $count + " of " + $searchUsers.Count +")") -Color Gray 
+            $redirLegacyDN += $obj
+        }
         if ($rule.ForwardTo -like "*@med.uvm.edu*") {
             [PSCustomObject]$obj = [PSCustomObject]@{ 
                 name = $user; 
-                email = ($rule.RedirectTo[0].Split('"') | select -index 1)
+                email = ($rule.ForwardTo[0].Split('"') | select -index 1)
             }
             writeHostAndLog -out ("    Found forwarded user: " + $obj.name + " (" + $count + " of " + $searchUsers.Count +")") -Color Gray
             $fwdUsers += $obj
+        }
+		elseif ($rule.ForwardTo -and $rule.ForwardTo[0].Address -match 'FYDIBOHF23SPDLT') {
+            [PSCustomObject]$obj = [PSCustomObject]@{ 
+                name = $user; 
+                LegacyExchangeDN = ($rule.ForwardTo[0].Address)
+            }
+            writeHostAndLog -out ("    Found forwarded user (to LegacyExchangeDN): " + $obj.name + " (" + $count + " of " + $searchUsers.Count +")") -Color Gray
+            $fwdLegacyDN += $obj
         }
     }
 }
@@ -224,6 +242,8 @@ writeHostAndLog -out " "
 writeHostAndLog -out ("Count of unprovisioned users: " + $unprovUsers.count) -color Cyan 
 writeHostAndLog -out ("Count of forwarding users: " + $fwdUsers.count) -color Cyan
 writeHostAndLog -out ("Count of redirected users: " + $redirUsers.count) -Color Cyan
+writeHostAndLog -out ("Count of forwarding users (LegacyExchangeDN): " + $fwdLegacyDN.count) -color Cyan
+writeHostAndLog -out ("Count of redirected users (LegacyExchangeDN): " + $redirLegacyDN.count) -Color Cyan
 writeHostAndLog -Out " "
 
 #if (test-path $outList) {Remove-Item -Path $outList -Force -Confirm:$false}
@@ -235,6 +255,9 @@ writeHostAndLog -Out " "
 writeHostAndLog -out ("Appending Exchange forwardwer to the penguin forwarders list...") -Color Cyan
 $users += $redirUsers
 $users += $fwdUsers
+$users += $redirLegacyDN
+$users += $fwdLegacyDN
+
 writeHostAndLog -Out ("New count of forwarding users: " + $users.count)
 
 writeHostAndLog -Out " "
