@@ -4,6 +4,10 @@ Modifys records of College of Medicine users by hiding them in the Global
 Address List and publish an alternate contact record.
 
 .DESCRIPTION
+THIS SCRIPT MUST NOT BE RUN IN THE EXCHANGE MANAGEMENT SHELL!
+(EMS generates different object types than an implicit session.  The logic used
+in this script will fail if advanced EMS objects are returned.)
+
 Takes a list of users from a CSV in the format NetID,emailAddress:
     - Hides users in the feed from the GAL.
     - Adds a contact object for all users in the feed.
@@ -152,6 +156,7 @@ try {
 } catch {
     writeHostAndLog -out "Could not initialize the PowerShell environment." -color Red
     logError $_
+    Get-PSSession | Remove-PSSession -ErrorAction SilentlyContinue | Out-Null
     return 100
 }
 
@@ -164,6 +169,7 @@ try {
     $users = Import-Csv -Path $penguinFeed -header 'name','email' -ea Stop
 } catch {
     writeHostAndLog -Out "Failed to import $penguinFeed as CSV" -Color Red
+    Get-PSSession | Remove-PSSession -ErrorAction SilentlyContinue | Out-Null
     return 110
 }
 writeHostAndLog -out ("Count of penguin forwarders: " + $users.count) -Color Cyan
@@ -180,6 +186,7 @@ try {
 } catch {
     writeHostAndLog -out "  Could not load list of users to evaluate from $searchList" -color Red
     logError $_
+    Get-PSSession | Remove-PSSession -ErrorAction SilentlyContinue | Out-Null
     return 120
 }
 
@@ -206,7 +213,7 @@ forEach ($user in $searchUsers) {
     forEach ($rule in $rules) {
 		#Got a lot of redundant code here... need a function:
 		#NOTE: potential problem exists if the user has more than one redirectTo value defined in a single rule.  Need to correct for that.
-		if ($rule.RedirectTo) { # Check if there are any redirect rules first (probably unnecessary):
+		if (($rule.Description -notmatch '^If the message:') -and [bool]($rule.enabled)) { # Check if rule is enabled and applies to all incoming messages...
 			if ($rule.RedirectTo -like "*@med.uvm.edu*") { #User is forwarding to the MED domain...)
 				[PSCustomObject]$obj = [PSCustomObject]@{
 					name = $user; 
@@ -222,8 +229,6 @@ forEach ($user in $searchUsers) {
 				# writeHostAndLog -out ("    Found redirected user (to LegacyExchangeDN): " + $obj.name+ " (" + $count + " of " + $searchUsers.Count +")") -Color Gray 
 				$redirLegacyDN += $obj		
 			}
-		}
-		if ($rule.ForwardTo) { #need to check if there are any ForwardTo rules before proceeding...
 			if ($rule.ForwardTo -like "*@med.uvm.edu*") {
 				[PSCustomObject]$obj = [PSCustomObject]@{ 
 					name = $user; 
@@ -256,7 +261,7 @@ writeHostAndLog -Out " "
 #$fwdUsers | Out-File -FilePath $outList -Append
 
 #Append mailbox-enabled users with Med forwarding to the extract from the Penguins:
-writeHostAndLog -out ("Appending Exchange forwardwer to the penguin forwarders list...") -Color Cyan
+writeHostAndLog -out ("Appending Exchange forwarder to the penguin forwarders list...") -Color Cyan
 $users += $redirUsers
 $users += $fwdUsers
 $users += $redirLegacyDN
@@ -381,6 +386,7 @@ try {
 } catch {
     writeHostAndLog -out "Failed to get a list of GAL-hidden mailboxes." -color Red
     logError $_
+    Get-PSSession | Remove-PSSession -ErrorAction SilentlyContinue | Out-Null
     return 200
 }
 # Loop though all hidden users:
@@ -410,6 +416,7 @@ try {
         select -ExpandProperty Alias
 } catch {
     writeHostAndLog -out "Failed to get a list of current Mail Contacts Objects." -color Red
+    Get-PSSession | Remove-PSSession -ErrorAction SilentlyContinue | Out-Null
     return 210
 }
 # Loop though all contact objects:
