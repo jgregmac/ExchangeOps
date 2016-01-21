@@ -205,21 +205,21 @@ forEach ($user in $searchUsers) {
     }
     forEach ($rule in $rules) {
 		#Got a lot of redundant code here... need a function:
-		#NOTE: potential problem exists if the user has more than one redirectTo value set in a single rule.  Need to correct for that.
-		if ($rule.RedirectTo) { #Need to check if there are any redirect rules first...
-			if ($rule.RedirectTo -like "*@med.uvm.edu*") {
+		#NOTE: potential problem exists if the user has more than one redirectTo value defined in a single rule.  Need to correct for that.
+		if ($rule.RedirectTo) { # Check if there are any redirect rules first (probably unnecessary):
+			if ($rule.RedirectTo -like "*@med.uvm.edu*") { #User is forwarding to the MED domain...)
 				[PSCustomObject]$obj = [PSCustomObject]@{
 					name = $user; 
 					email = ($rule.RedirectTo[0].Split('"') | select -index 1)
 				}
-				writeHostAndLog -out ("    Found redirected user: " + $obj.name+ " (" + $count + " of " + $searchUsers.Count +")") -Color Gray 
+				# writeHostAndLog -out ("    Found redirected user: " + $obj.name+ " (" + $count + " of " + $searchUsers.Count +")") -Color Gray 
 				$redirUsers += $obj
 			} elseif ($rule.RedirectTo -match 'FYDIBOHF23SPDLT') { #This matches a LegacyExchangeDN address
 				[PSCustomObject]$obj = [PSCustomObject]@{
 					name = $user; 
-					LegacyExchangeDN = ($rule.RedirectTo[0].Address)
+					LegacyExchangeDN = ( $rule.RedirectTo[0] -match '\[EX:(.+)\]' | % {$matches[1]} ) 
 				}
-				writeHostAndLog -out ("    Found redirected user (to LegacyExchangeDN): " + $obj.name+ " (" + $count + " of " + $searchUsers.Count +")") -Color Gray 
+				# writeHostAndLog -out ("    Found redirected user (to LegacyExchangeDN): " + $obj.name+ " (" + $count + " of " + $searchUsers.Count +")") -Color Gray 
 				$redirLegacyDN += $obj		
 			}
 		}
@@ -229,14 +229,14 @@ forEach ($user in $searchUsers) {
 					name = $user; 
 					email = ($rule.ForwardTo[0].Split('"') | select -index 1)
 				}
-				writeHostAndLog -out ("    Found forwarded user: " + $obj.name + " (" + $count + " of " + $searchUsers.Count +")") -Color Gray
+				# writeHostAndLog -out ("    Found forwarded user: " + $obj.name + " (" + $count + " of " + $searchUsers.Count +")") -Color Gray
 				$fwdUsers += $obj
 			} elseif ($rule.ForwardTo -and $rule.ForwardTo -match 'FYDIBOHF23SPDLT') { #This matches a LegacyExchangeDN address
 				[PSCustomObject]$obj = [PSCustomObject]@{ 
 					name = $user; 
-					LegacyExchangeDN = ($rule.ForwardTo[0].Address)
+					LegacyExchangeDN = ( $rule.ForwardTo[0]-match '\[EX:(.+)\]' | % {$matches[1]} )
 				}
-				writeHostAndLog -out ("    Found forwarded user (to LegacyExchangeDN): " + $obj.name + " (" + $count + " of " + $searchUsers.Count +")") -Color Gray
+				# writeHostAndLog -out ("    Found forwarded user (to LegacyExchangeDN): " + $obj.name + " (" + $count + " of " + $searchUsers.Count +")") -Color Gray
 				$fwdLegacyDN += $obj
 			}
 		}
@@ -261,11 +261,16 @@ $users += $redirUsers
 $users += $fwdUsers
 $users += $redirLegacyDN
 $users += $fwdLegacyDN
-
+$users = $users | sort -Property name -unique
 writeHostAndLog -Out ("New count of forwarding users: " + $users.count)
 
 writeHostAndLog -Out " "
 showElapsedTime -startTime $startTime
+
+#Collect users that are forwarding to a LegacyExchangeDN for later validation of records:
+$LegacyDNUsers = @()
+$LegacyDNUsers = $redirLegacyDN + $fwdLegacyDN
+$LegacyDNUsers = $LegacyDNUsers | sort -property name -unique
 
 #
 # Stop search for Exhchange mailbox forwarders
@@ -428,6 +433,28 @@ foreach ($contact in $allContacts) {
 showElapsedTime -startTime $startTime
 writeHostAndLog -out " "
 
+###############################################################################
+# Start Validate LegacyExchangeDN loop:
+#
+$badDNs = @()
+foreach ($user in $LegacyDNUsers) {
+    [bool]$badDN = $false
+    try {
+        $contact = Get-MailContact -Identity $user.LegacyExchangeDN -ea Stop
+    } catch {
+        $badDN = $true
+    }
+    if ($badDN) {
+        writeHostAndLog -out ("User " + $user.name + " has forwarding rule that points to an invalid LegacyExchangeDN.  Fix it!") -color Yellow
+    }
+    $badDNs += $user.name
+}
+#
+# End Validate LegacyExchangeDN loop:
+###############################################################################
+showElapsedTime -startTime $startTime
+writeHostAndLog -out " "
+
 
 writeHostAndLog -out ("List of users with no AD account: ") 
 writeHostAndLog -out ('  ' + $noADAccount) -color Yellow
@@ -441,6 +468,8 @@ writeHostAndLog -out ("List of users who could not be un-hidden from the GAL: ")
 writeHostAndLog -out ('  ' + $unhideFailed) -color Yellow
 writeHostAndLog -out ("List of users for whom contact removal failed: ")
 writeHostAndLog -out ('  ' + $rmContactFailed) -color Yellow
+writeHostAndLog -out ("List of users with invalid forwarding rules: ")
+writeHostAndLog -out ('  ' + $badDNs) -color Yellow
 # Verbose information... commented out
 # writeHostAndLog -out ("List of users with addresses already hidden: " + $alreadyHidden) -color Gray
 # writeHostAndLog -out ("List of users who already have a contact: " + $contactExists) -color Gray
